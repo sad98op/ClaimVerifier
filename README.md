@@ -9,6 +9,19 @@ This is a reusable building block, not a one-off demo.
 
 ---
 
+## Live Deployment (Studio / Testnet)
+
+| Item | Value |
+|------|-------|
+| **Contract Address** | [`0x6CBfC617bF083568544f010114dEb021f82DD8e9`](https://explorer-studio.genlayer.com/address/0x6CBfC617bF083568544f010114dEb021f82DD8e9) |
+| **Deploy Tx** | [`0x590cacdaf1c675fc64c31afdb3d3f3f60fb2f02ea2c731d9aaf8d7bd0bd9ea8e`](https://explorer-studio.genlayer.com/tx/0x590cacdaf1c675fc64c31afdb3d3f3f60fb2f02ea2c731d9aaf8d7bd0bd9ea8e) |
+| **submit_claim** | SUCCESS + Accepted |
+| **resolve_claim** | SUCCESS + Accepted |
+
+End-to-end flow (submit + resolve) completed successfully with GenLayer consensus.
+
+---
+
 ## Why this exists
 
 Many real-world processes require judgment over unstructured evidence:
@@ -29,7 +42,7 @@ Traditional smart contracts cannot do this. ClaimVerifier turns natural-language
 1. **Leader** fetches every evidence URL and asks an LLM for a structured judgment.
 2. **Validators** independently re-fetch the same URLs and produce their own judgment.
 3. Equivalence is checked **only on the decision fields**:
-   - `status` must match exactly (`supported` | `partially_supported` | `refuted` | `inconclusive`)
+   - `status` must match exactly (`supported` \| `partially_supported` \| `refuted` \| `inconclusive`)
    - `confidence` (0–100) may differ by at most 20 points (tolerance for model variance)
 4. Free-text reasoning is stored but never used for equivalence.
 5. State is updated only after consensus succeeds.
