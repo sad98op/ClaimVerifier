@@ -9,59 +9,25 @@ class ClaimVerifier(gl.Contract):
     """
     ClaimVerifier — Evidence-Based Claim Verification Primitive
 
-    Submit a natural-language claim together with supporting / refuting
-    evidence URLs. GenLayer validators independently fetch the live evidence,
-    analyse it with an LLM, and reach consensus on a structured decision
-    (status + confidence) under a custom Equivalence Principle.
-
-    Design goals:
-    - Real multi-source web + LLM consensus (not a thin wrapper)
-    - Clear state machine and simple storage
-    - Thoughtful equivalence: agreement required only on the actionable
-      decision fields (status + confidence band). Reasoning text may differ.
-    - Reusable primitive for disputes, fact-checking, prediction markets,
-      insurance claims, DAO proposals, agentic commerce, etc.
+    Submit a natural-language claim + evidence URLs.
+    Validators independently fetch evidence and reach consensus
+    on status + confidence under the Equivalence Principle.
     """
 
-    # Simple storage: claim_id (str) -> JSON-encoded claim data
-    # We keep storage deliberately simple for maximum schema compatibility.
     next_claim_id: u256
     claim_texts: TreeMap[str, str]
     claim_submitters: TreeMap[str, str]
-    claim_evidence: TreeMap[str, str]          # JSON list of URLs
+    claim_evidence: TreeMap[str, str]
     claim_status: TreeMap[str, str]
     claim_confidence: TreeMap[str, u256]
     claim_reasoning: TreeMap[str, str]
     claim_resolved: TreeMap[str, bool]
 
-    ALLOWED_STATUSES = (
-        "supported",
-        "partially_supported",
-        "refuted",
-        "inconclusive",
-    )
-
     def __init__(self):
         self.next_claim_id = u256(0)
-        self.claim_texts = TreeMap()
-        self.claim_submitters = TreeMap()
-        self.claim_evidence = TreeMap()
-        self.claim_status = TreeMap()
-        self.claim_confidence = TreeMap()
-        self.claim_reasoning = TreeMap()
-        self.claim_resolved = TreeMap()
-
-    # ------------------------------------------------------------------
-    # Write methods
-    # ------------------------------------------------------------------
 
     @gl.public.write
     def submit_claim(self, claim_text: str, evidence_urls_json: str) -> str:
-        """
-        Submit a new claim.
-        evidence_urls_json must be a JSON array of strings, e.g. '["https://a.com","https://b.com"]'
-        Returns the claim_id as string.
-        """
         if not claim_text or not claim_text.strip():
             raise Exception("claim_text must be non-empty")
 
@@ -92,13 +58,6 @@ class ClaimVerifier(gl.Contract):
 
     @gl.public.write
     def resolve_claim(self, claim_id: str) -> str:
-        """
-        Trigger consensus resolution for a pending claim.
-        Leader + validators independently fetch evidence and produce
-        a structured decision. Equivalence is checked only on status
-        and confidence band.
-        Returns a JSON string of the accepted result.
-        """
         if claim_id not in self.claim_texts:
             raise Exception(f"claim {claim_id} does not exist")
         if self.claim_resolved.get(claim_id, False):
@@ -137,7 +96,7 @@ class ClaimVerifier(gl.Contract):
 You are a careful evidence analyst. Evaluate the following claim strictly against the provided evidence.
 
 Claim:
-\"\"\"{claim_text}\"\"\"
+\"\"\"{claim_text}\\"\"\"
 
 Evidence:
 {evidence_blob}
@@ -236,10 +195,6 @@ Rules:
         self.claim_resolved[claim_id] = True
 
         return json.dumps(result, sort_keys=True)
-
-    # ------------------------------------------------------------------
-    # View methods (simple types only for schema compatibility)
-    # ------------------------------------------------------------------
 
     @gl.public.view
     def get_claim_count(self) -> u256:
