@@ -12,6 +12,10 @@ class ClaimVerifier(gl.Contract):
     Submit a natural-language claim + evidence URLs.
     Validators independently fetch evidence and reach consensus
     on status + confidence under the Equivalence Principle.
+
+    Consensus pattern follows the supported leader/validator flow:
+    all gl.nondet.* calls live inside leader_fn; validators re-run
+    the same function and compare only decision fields.
     """
 
     next_claim_id: u256
@@ -29,19 +33,21 @@ class ClaimVerifier(gl.Contract):
     @gl.public.write
     def submit_claim(self, claim_text: str, evidence_urls_json: str) -> str:
         if not claim_text or not claim_text.strip():
-            raise Exception("claim_text must be non-empty")
+            raise gl.vm.UserError("claim_text must be non-empty")
 
         try:
             urls = json.loads(evidence_urls_json)
-            if not isinstance(urls, list) or len(urls) == 0:
-                raise Exception("at least one evidence URL is required")
-            if len(urls) > 5:
-                raise Exception("maximum 5 evidence URLs allowed")
-            cleaned = [str(u).strip() for u in urls if str(u).strip()]
-            if not cleaned:
-                raise Exception("no valid evidence URLs")
-        except Exception as e:
-            raise Exception(f"invalid evidence_urls_json: {e}")
+        except Exception:
+            raise gl.vm.UserError("evidence_urls_json must be valid JSON array of strings")
+
+        if not isinstance(urls, list) or len(urls) == 0:
+            raise gl.vm.UserError("at least one evidence URL is required")
+        if len(urls) > 5:
+            raise gl.vm.UserError("maximum 5 evidence URLs allowed")
+
+        cleaned = [str(u).strip() for u in urls if str(u).strip()]
+        if not cleaned:
+            raise gl.vm.UserError("no valid evidence URLs")
 
         claim_id = str(self.next_claim_id)
         self.next_claim_id += u256(1)
@@ -59,15 +65,17 @@ class ClaimVerifier(gl.Contract):
     @gl.public.write
     def resolve_claim(self, claim_id: str) -> str:
         if claim_id not in self.claim_texts:
-            raise Exception(f"claim {claim_id} does not exist")
+            raise gl.vm.UserError(f"claim {claim_id} does not exist")
         if self.claim_resolved.get(claim_id, False):
-            raise Exception(f"claim {claim_id} is already resolved")
+            raise gl.vm.UserError(f"claim {claim_id} is already resolved")
 
         claim_text = self.claim_texts[claim_id]
         evidence_urls = json.loads(self.claim_evidence[claim_id])
 
-        def analyze() -> dict:
-            evidence_blocks = []
+        def leader_fn() -> dict:
+            # All nondet calls must be reachable inside this function
+            # so the GenVM linter recognizes the supported consensus flow.
+            evidence_blocks: list[str] = []
             fetch_errors = 0
 
             for i, url in enumerate(evidence_urls):
@@ -96,7 +104,7 @@ class ClaimVerifier(gl.Contract):
 You are a careful evidence analyst. Evaluate the following claim strictly against the provided evidence.
 
 Claim:
-\"\"\"{claim_text}\\"\"\"
+\"\"\"{claim_text}\"\"\"
 
 Evidence:
 {evidence_blob}
@@ -126,7 +134,7 @@ Rules:
             elif isinstance(raw, dict):
                 data = raw
             else:
-                raise Exception(f"Unexpected LLM response type: {type(raw)}")
+                raise gl.vm.UserError(f"Unexpected LLM response type: {type(raw)}")
 
             status = str(data.get("status", "")).strip().lower()
             if status not in (
@@ -135,13 +143,13 @@ Rules:
                 "refuted",
                 "inconclusive",
             ):
-                raise Exception(f"Invalid status returned: {status}")
+                raise gl.vm.UserError(f"Invalid status returned: {status}")
 
             conf = data.get("confidence", 0)
             try:
                 conf_int = int(round(float(conf)))
             except (TypeError, ValueError):
-                raise Exception(f"Non-numeric confidence: {conf}")
+                raise gl.vm.UserError(f"Non-numeric confidence: {conf}")
             conf_int = max(0, min(100, conf_int))
 
             reasoning = str(data.get("reasoning", "")).strip()
@@ -154,12 +162,12 @@ Rules:
                 "reasoning": reasoning,
             }
 
-        def leader_fn():
-            return analyze()
-
         def validator_fn(leader_result) -> bool:
+            # Supported pattern: check leader success, re-run leader_fn independently,
+            # compare only decision fields (status exact + confidence band).
             if not isinstance(leader_result, gl.vm.Return):
                 return False
+
             leader_data = leader_result.calldata
             if not isinstance(leader_data, dict):
                 return False
@@ -177,13 +185,13 @@ Rules:
                 return False
 
             try:
-                my_data = analyze()
+                own = leader_fn()
             except Exception:
                 return False
 
-            if my_data["status"] != status:
+            if own["status"] != status:
                 return False
-            if abs(int(my_data["confidence"]) - int(conf)) > 20:
+            if abs(int(own["confidence"]) - int(conf)) > 20:
                 return False
             return True
 
