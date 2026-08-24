@@ -13,12 +13,10 @@ This is a reusable building block, not a one-off demo.
 
 | Item | Value |
 |------|-------|
-| **Contract Address** | [`0x6CBfC617bF083568544f010114dEb021f82DD8e9`](https://explorer-studio.genlayer.com/address/0x6CBfC617bF083568544f010114dEb021f82DD8e9) |
-| **Deploy Tx** | [`0x590cacdaf1c675fc64c31afdb3d3f3f60fb2f02ea2c731d9aaf8d7bd0bd9ea8e`](https://explorer-studio.genlayer.com/tx/0x590cacdaf1c675fc64c31afdb3d3f3f60fb2f02ea2c731d9aaf8d7bd0bd9ea8e) |
-| **submit_claim** | SUCCESS + Accepted |
-| **resolve_claim** | SUCCESS + Accepted |
+| **Contract Address** | [`0x5c8224F1bf6B1dae8F62EDa7C94697e97F359a81`](https://explorer-studio.genlayer.com/address/0x5c8224F1bf6B1dae8F62EDa7C94697e97F359a81) |
+| **Deploy Tx** | SUCCESS + Accepted (GenVM lint compliant leader/validator pattern) |
 
-End-to-end flow (submit + resolve) completed successfully with GenLayer consensus.
+Source matches the deployed bytecode. All `gl.nondet.*` calls are inside `leader_fn`; validators re-run the same function and compare decision fields only.
 
 ---
 
@@ -39,15 +37,15 @@ Traditional smart contracts cannot do this. ClaimVerifier turns natural-language
 
 ## How consensus is used
 
-1. **Leader** fetches every evidence URL and asks an LLM for a structured judgment.
-2. **Validators** independently re-fetch the same URLs and produce their own judgment.
+1. **Leader** (`leader_fn`) fetches every evidence URL and asks an LLM for a structured judgment.
+2. **Validators** independently re-run the same `leader_fn` and produce their own judgment.
 3. Equivalence is checked **only on the decision fields**:
-   - `status` must match exactly (`supported` \| `partially_supported` \| `refuted` \| `inconclusive`)
+   - `status` must match exactly (`supported` | `partially_supported` | `refuted` | `inconclusive`)
    - `confidence` (0–100) may differ by at most 20 points (tolerance for model variance)
 4. Free-text reasoning is stored but never used for equivalence.
 5. State is updated only after consensus succeeds.
 
-This follows GenLayer best practices for non-deterministic blocks and the Equivalence Principle.
+This follows the supported GenLayer leader/validator pattern required by GenVM lint.
 
 ---
 
@@ -75,9 +73,10 @@ Triggers consensus resolution. Returns the accepted JSON result.
 
 ## Design goals (why it qualifies as a strong primitive)
 
-- Real multi-source web + LLM consensus
+- Real multi-source web + LLM consensus under a linter-supported pattern
 - Clear, minimal state design (TreeMaps of simple types)
 - Thoughtful validators (status exact match + confidence tolerance)
+- `gl.vm.UserError` for business-logic errors
 - Useful beyond a single demo
 - Readable source + documentation so other builders can reuse or extend it
 
